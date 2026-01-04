@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx create-expo-app@latest . --template blank-typescript --yes)",
+      "Bash(npm install:*)"
+    ]
+  }
+}
