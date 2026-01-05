@@ -28,12 +28,11 @@ interface DataTableProps {
   onAddSet: () => void;
 }
 
-// Column header configuration
+// Column header configuration (RPE removed per user preference)
 const COLUMNS = [
   { key: 'set', label: 'Set', width: 50 },
-  { key: 'reps', label: 'Reps', width: 70 },
-  { key: 'load', label: 'Load', width: 90 },
-  { key: 'rpe', label: 'RPE', width: 70 },
+  { key: 'reps', label: 'Reps', width: 80 },
+  { key: 'load', label: 'Load', flex: 1 },
 ] as const;
 
 const DataTable: React.FC<DataTableProps> = ({
@@ -49,7 +48,7 @@ const DataTable: React.FC<DataTableProps> = ({
         {COLUMNS.map((column) => (
           <View
             key={column.key}
-            style={[styles.headerCell, { width: column.width, flex: column.key === 'rpe' ? 1 : 0 }]}
+            style={[styles.headerCell, 'width' in column ? { width: column.width } : { flex: column.flex }]}
           >
             <Text style={styles.headerText}>{column.label}</Text>
           </View>

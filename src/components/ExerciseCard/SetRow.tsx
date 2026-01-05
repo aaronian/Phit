@@ -30,9 +30,7 @@ interface SetRowProps {
 // Column width configuration (must match DataTable headers)
 const COLUMN_WIDTHS = {
   set: 50,
-  reps: 70,
-  load: 90,
-  rpe: 70,
+  reps: 80,
 };
 
 const SetRow: React.FC<SetRowProps> = ({ exerciseId, set, onCellPress }) => {
@@ -65,17 +63,8 @@ const SetRow: React.FC<SetRowProps> = ({ exerciseId, set, onCellPress }) => {
     return `${set.load} ${set.loadUnit}`;
   };
 
-  /**
-   * Formats RPE value.
-   * RPE is typically shown with one decimal place.
-   */
-  const formatRpe = (): string => {
-    if (set.rpe === null) return '-';
-    return set.rpe.toFixed(1);
-  };
-
   // Determine if row has any data entered
-  const hasData = set.reps !== null || set.load !== null || set.rpe !== null;
+  const hasData = set.reps !== null || set.load !== null;
 
   return (
     <View style={[styles.row, !hasData && styles.rowEmpty]}>
@@ -100,25 +89,13 @@ const SetRow: React.FC<SetRowProps> = ({ exerciseId, set, onCellPress }) => {
 
       {/* Load cell (tappable) */}
       <TouchableOpacity
-        style={[styles.cell, styles.editableCell, { width: COLUMN_WIDTHS.load }]}
+        style={[styles.cell, styles.editableCell, { flex: 1 }]}
         onPress={createPressHandler('load')}
         activeOpacity={0.6}
         accessibilityLabel={`Edit load for set ${set.setNumber}`}
       >
         <Text style={[styles.cellValue, set.load === null && styles.cellValueEmpty]}>
           {formatLoad()}
-        </Text>
-      </TouchableOpacity>
-
-      {/* RPE cell (tappable) */}
-      <TouchableOpacity
-        style={[styles.cell, styles.editableCell, { flex: 1 }]}
-        onPress={createPressHandler('rpe')}
-        activeOpacity={0.6}
-        accessibilityLabel={`Edit RPE for set ${set.setNumber}`}
-      >
-        <Text style={[styles.cellValue, set.rpe === null && styles.cellValueEmpty]}>
-          {formatRpe()}
         </Text>
       </TouchableOpacity>
     </View>
