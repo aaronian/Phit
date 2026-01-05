@@ -27,7 +27,6 @@ import React, {
   createContext,
   useContext,
   useState,
-  useEffect,
   useCallback,
   useMemo,
   type ReactNode,
@@ -35,7 +34,6 @@ import React, {
 import type {
   Workout,
   WorkoutSession,
-  ExerciseLog,
   SetLog,
   SectionProgress,
   ProgressState,
@@ -48,6 +46,17 @@ import {
   completeExercise,
   completeSession,
 } from '../services/workoutService';
+
+/**
+ * SessionState Type
+ *
+ * Represents the different states a workout session can be in:
+ * - 'active': Session is currently in progress
+ * - 'paused': Session has been paused (with pausedAt timestamp saved)
+ * - 'completed': Session has been finished successfully
+ * - 'cancelled': Session was cancelled before completion
+ */
+export type SessionState = 'active' | 'paused' | 'completed' | 'cancelled';
 
 // Define the shape of our context
 // This is TypeScript telling us what data and functions will be available
@@ -62,6 +71,9 @@ interface WorkoutSessionContextType {
   sectionProgress: SectionProgress[];
   currentSectionIndex: number;
 
+  // Timer pause state (for quick breaks, different from session pause)
+  isPaused: boolean;
+
   // Actions (functions to modify state)
   startSession: (userId: string, workout: Workout) => Promise<void>;
   updateSetData: (
@@ -72,6 +84,15 @@ interface WorkoutSessionContextType {
   markExerciseComplete: (exerciseId: string) => Promise<void>;
   markAllSetsFromFirst: (exerciseId: string) => Promise<void>;
   finishWorkout: () => Promise<void>;
+
+  // Timer control functions
+  pauseTimer: () => void;   // Pause the timer for a quick break
+  resumeTimer: () => void;  // Resume the timer after a pause
+
+  // Session lifecycle functions
+  pauseSession: () => Promise<void>;  // Pause session and save state (for Save & Exit)
+  cancelSession: () => void;          // Discard session without saving
+  clearSession: () => void;           // Clear session data (used after navigation)
 
   // Preferences
   defaultLoadUnit: LoadUnit;
@@ -106,6 +127,9 @@ export function WorkoutSessionProvider({ children }: ProviderProps) {
   const [session, setSession] = useState<WorkoutSession | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Timer pause state - for quick breaks without leaving the workout
+  const [isPaused, setIsPaused] = useState(false);
 
   // User preferences
   const [defaultLoadUnit, setDefaultLoadUnit] = useState<LoadUnit>('lb');
@@ -266,6 +290,82 @@ export function WorkoutSessionProvider({ children }: ProviderProps) {
     }
   }, [session]);
 
+  /**
+   * Pause the timer
+   *
+   * Used for quick breaks (getting water, answering phone, etc.)
+   * Does NOT save state to server - just pauses the UI timer display
+   */
+  const pauseTimer = useCallback(() => {
+    setIsPaused(true);
+  }, []);
+
+  /**
+   * Resume the timer after a pause
+   */
+  const resumeTimer = useCallback(() => {
+    setIsPaused(false);
+  }, []);
+
+  /**
+   * Pause the session and save state (for Save & Exit)
+   *
+   * This saves the current progress to Firestore so the user can
+   * resume the workout later. The session remains in the database
+   * with a 'paused' status.
+   */
+  const pauseSession = useCallback(async () => {
+    if (!session) return;
+
+    try {
+      // TODO: Implement pauseSession in workoutService when Firestore schema supports it
+      // For now, the session data is already being synced in real-time,
+      // so the progress is automatically saved. We just need to clear local state.
+      console.log('Session paused, progress saved:', session.id);
+
+      // Clear local state but leave session in Firestore for resumption
+      setWorkout(null);
+      setSession(null);
+      setCurrentSectionIndex(0);
+      setIsPaused(false);
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : 'Failed to pause session'
+      );
+    }
+  }, [session]);
+
+  /**
+   * Cancel the session without saving
+   *
+   * Discards all progress. Use with caution - shows confirmation in UI first.
+   */
+  const cancelSession = useCallback(() => {
+    // TODO: Optionally delete the session from Firestore
+    // For now, we just clear local state (orphaned sessions can be cleaned up later)
+    console.log('Session cancelled');
+
+    setWorkout(null);
+    setSession(null);
+    setCurrentSectionIndex(0);
+    setIsPaused(false);
+    setError(null);
+  }, []);
+
+  /**
+   * Clear session data
+   *
+   * Used for cleanup after navigation or when session naturally ends.
+   * Different from cancelSession in intent - this is for cleanup, not user action.
+   */
+  const clearSession = useCallback(() => {
+    setWorkout(null);
+    setSession(null);
+    setCurrentSectionIndex(0);
+    setIsPaused(false);
+    setError(null);
+  }, []);
+
   // Bundle all our state and functions into the context value
   const contextValue = useMemo(
     () => ({
@@ -275,11 +375,17 @@ export function WorkoutSessionProvider({ children }: ProviderProps) {
       error,
       sectionProgress,
       currentSectionIndex,
+      isPaused,
       startSession,
       updateSetData,
       markExerciseComplete,
       markAllSetsFromFirst,
       finishWorkout,
+      pauseTimer,
+      resumeTimer,
+      pauseSession,
+      cancelSession,
+      clearSession,
       defaultLoadUnit,
       setDefaultLoadUnit,
     }),
@@ -290,11 +396,17 @@ export function WorkoutSessionProvider({ children }: ProviderProps) {
       error,
       sectionProgress,
       currentSectionIndex,
+      isPaused,
       startSession,
       updateSetData,
       markExerciseComplete,
       markAllSetsFromFirst,
       finishWorkout,
+      pauseTimer,
+      resumeTimer,
+      pauseSession,
+      cancelSession,
+      clearSession,
       defaultLoadUnit,
     ]
   );

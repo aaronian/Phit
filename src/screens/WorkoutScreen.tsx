@@ -12,10 +12,14 @@ import {
   NativeScrollEvent,
   Text,
   Alert,
+  TouchableOpacity,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native';
 import { useWorkoutSession } from '../contexts/WorkoutSessionContext';
 import { SidePanel } from '../components/SidePanel';
 import ExerciseCard from '../components/ExerciseCard';
+import ExitWorkoutModal from '../components/ExitWorkoutModal';
 import {
   LoadKeypad,
   NotesSheet,
@@ -31,13 +35,13 @@ const SIDE_PANEL_WIDTH_COLLAPSED = 50;
 interface ActiveCell {
   exerciseId: string;
   setNumber: number;
-  field: 'reps' | 'load';
+  field: 'reps' | 'load' | 'rpe';
   currentValue: number | null;
 }
 
 interface ActiveTool {
   exerciseId: string;
-  tool: 'notes' | 'history';
+  tool: 'timer' | 'notes' | 'history';
   exerciseName: string;
 }
 
@@ -50,10 +54,16 @@ export default function WorkoutScreen() {
     markExerciseComplete,
     markAllSetsFromFirst,
     finishWorkout,
+    pauseTimer,
+    resumeTimer,
+    pauseSession,
+    cancelSession,
     defaultLoadUnit,
     setDefaultLoadUnit,
   } = useWorkoutSession();
 
+  const navigation = useNavigation();
+  const insets = useSafeAreaInsets();
   const scrollViewRef = useRef<ScrollView>(null);
 
   // Overlay visibility state
@@ -61,6 +71,7 @@ export default function WorkoutScreen() {
   const [showLoadKeypad, setShowLoadKeypad] = useState(false);
   const [showNotes, setShowNotes] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const [showExitModal, setShowExitModal] = useState(false);
 
   const [activeSectionIndex, setActiveSectionIndex] = useState(0);
   const [activeCell, setActiveCell] = useState<ActiveCell | null>(null);
@@ -258,6 +269,34 @@ export default function WorkoutScreen() {
     setActiveTool(null);
   }, []);
 
+  // Exit modal handlers
+  const handleExitPress = useCallback(() => {
+    setShowExitModal(true);
+  }, []);
+
+  const handlePauseTimer = useCallback(() => {
+    pauseTimer();
+    setShowExitModal(false);
+  }, [pauseTimer]);
+
+  const handleSaveAndExit = useCallback(async () => {
+    setShowExitModal(false);
+    await pauseSession();
+    // Navigate to Home tab after saving
+    navigation.navigate('Home' as never);
+  }, [pauseSession, navigation]);
+
+  const handleCancelWorkout = useCallback(() => {
+    setShowExitModal(false);
+    cancelSession();
+    // Navigate to Home tab after cancelling
+    navigation.navigate('Home' as never);
+  }, [cancelSession, navigation]);
+
+  const handleExitModalDismiss = useCallback(() => {
+    setShowExitModal(false);
+  }, []);
+
   if (!workout || !session) {
     return (
       <View style={styles.emptyContainer}>
@@ -271,23 +310,39 @@ export default function WorkoutScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={[styles.sidePanel, { width: sidePanelWidth }]}>
-        <SidePanel
-          onSectionPress={handleSectionPress}
-          activeSectionIndex={activeSectionIndex}
-          isCollapsed={sidebarCollapsed}
-          onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
-        />
+      {/* Header with workout title and exit button */}
+      <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
+        <Text style={styles.headerTitle} numberOfLines={1}>
+          {workout.name}
+        </Text>
+        <TouchableOpacity
+          style={styles.exitButton}
+          onPress={handleExitPress}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.exitButtonText}>✕</Text>
+        </TouchableOpacity>
       </View>
 
-      <ScrollView
-        ref={scrollViewRef}
-        style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
-        onScroll={handleScroll}
-        scrollEventThrottle={16}
-        showsVerticalScrollIndicator
-      >
+      {/* Main content area with side panel and scroll view */}
+      <View style={styles.contentContainer}>
+        <View style={[styles.sidePanel, { width: sidePanelWidth }]}>
+          <SidePanel
+            onSectionPress={handleSectionPress}
+            activeSectionIndex={activeSectionIndex}
+            isCollapsed={sidebarCollapsed}
+            onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
+          />
+        </View>
+
+        <ScrollView
+          ref={scrollViewRef}
+          style={styles.scrollView}
+          contentContainerStyle={styles.scrollContent}
+          onScroll={handleScroll}
+          scrollEventThrottle={16}
+          showsVerticalScrollIndicator
+        >
         {allExercises.map((item) => {
           const exerciseLog = getExerciseLog(item.exercise.id);
           return (
@@ -316,8 +371,9 @@ export default function WorkoutScreen() {
             </View>
           );
         })}
-        <View style={styles.bottomPadding} />
-      </ScrollView>
+          <View style={styles.bottomPadding} />
+        </ScrollView>
+      </View>
 
       {/* Overlays */}
       <LoadKeypad
@@ -343,12 +399,65 @@ export default function WorkoutScreen() {
         onSelectHistory={handleHistorySelect}
         onDismiss={handleHistoryDismiss}
       />
+
+      {/* Exit Workout Modal */}
+      <ExitWorkoutModal
+        visible={showExitModal}
+        onPauseTimer={handlePauseTimer}
+        onSaveAndExit={handleSaveAndExit}
+        onCancelWorkout={handleCancelWorkout}
+        onDismiss={handleExitModalDismiss}
+      />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, flexDirection: 'row', backgroundColor: '#121212' },
+  // Main container - now column layout to stack header + content
+  container: {
+    flex: 1,
+    flexDirection: 'column',
+    backgroundColor: '#121212',
+  },
+
+  // Header with workout title and exit button
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+    backgroundColor: '#1C1C1E',
+    borderBottomWidth: 1,
+    borderBottomColor: '#2C2C2E',
+  },
+  headerTitle: {
+    flex: 1,
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#FFFFFF',
+    marginRight: 12,
+  },
+  exitButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#2C2C2E',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  exitButtonText: {
+    fontSize: 18,
+    color: '#8E8E93',
+    fontWeight: '500',
+  },
+
+  // Content container - row layout for side panel + scroll view
+  contentContainer: {
+    flex: 1,
+    flexDirection: 'row',
+  },
+
   sidePanel: { backgroundColor: '#1A1A1A' },
   scrollView: { flex: 1 },
   scrollContent: { paddingTop: 8 },

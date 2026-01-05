@@ -1,8 +1,11 @@
 /**
- * SidePanel Component - Collapsible
+ * SidePanel Component - Collapsible with Overlay
+ * 
+ * When collapsed: Renders as a narrow inline strip (50px) within the layout
+ * When expanded: Renders as an overlay on top of content with a semi-transparent backdrop
  */
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Animated } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, TouchableWithoutFeedback, Dimensions } from 'react-native';
 import { useWorkoutSession } from '../../contexts/WorkoutSessionContext';
 import { SectionButton } from './SectionButton';
 
@@ -11,9 +14,17 @@ interface SidePanelProps {
   activeSectionIndex: number;
   isCollapsed: boolean;
   onToggleCollapse: () => void;
+  /** Optional callback for backdrop press - defaults to onToggleCollapse if not provided */
+  onBackdropPress?: () => void;
 }
 
-export function SidePanel({ onSectionPress, activeSectionIndex, isCollapsed, onToggleCollapse }: SidePanelProps) {
+export function SidePanel({ 
+  onSectionPress, 
+  activeSectionIndex, 
+  isCollapsed, 
+  onToggleCollapse,
+  onBackdropPress 
+}: SidePanelProps) {
   const { session, sectionProgress } = useWorkoutSession();
   const [timerDisplay, setTimerDisplay] = useState('00:00');
 
@@ -32,7 +43,7 @@ export function SidePanel({ onSectionPress, activeSectionIndex, isCollapsed, onT
       const totalSeconds = Math.floor(elapsedMs / 1000);
       const minutes = Math.floor(totalSeconds / 60);
       const seconds = totalSeconds % 60;
-      setTimerDisplay(`${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`);
+      setTimerDisplay(minutes.toString().padStart(2, '0') + ':' + seconds.toString().padStart(2, '0'));
     };
 
     updateTimer();
@@ -40,7 +51,16 @@ export function SidePanel({ onSectionPress, activeSectionIndex, isCollapsed, onT
     return () => clearInterval(intervalId);
   }, [session]);
 
-  // Collapsed view - just icons
+  // Handle backdrop press - use provided callback or fall back to toggle
+  const handleBackdropPress = () => {
+    if (onBackdropPress) {
+      onBackdropPress();
+    } else {
+      onToggleCollapse();
+    }
+  };
+
+  // Collapsed view - just icons (inline, takes up 50px in parent flex row)
   if (isCollapsed) {
     return (
       <View style={styles.collapsedContainer}>
@@ -68,48 +88,88 @@ export function SidePanel({ onSectionPress, activeSectionIndex, isCollapsed, onT
     );
   }
 
-  // Expanded view - full panel
+  // Expanded view - overlay with backdrop
+  // Uses absolute positioning to overlay on top of content
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.logo}>PHIT</Text>
-        <TouchableOpacity onPress={onToggleCollapse} style={styles.collapseButton}>
-          <Text style={styles.collapseIcon}>‹</Text>
-        </TouchableOpacity>
-      </View>
+    <View style={styles.overlayWrapper}>
+      {/* Semi-transparent backdrop - tapping closes the panel */}
+      <TouchableWithoutFeedback onPress={handleBackdropPress}>
+        <View style={styles.backdrop} />
+      </TouchableWithoutFeedback>
+      
+      {/* The actual panel content */}
+      <View style={styles.expandedPanel}>
+        <View style={styles.header}>
+          <Text style={styles.logo}>PHIT</Text>
+          <TouchableOpacity onPress={onToggleCollapse} style={styles.collapseButton}>
+            <Text style={styles.collapseIcon}>‹</Text>
+          </TouchableOpacity>
+        </View>
 
-      <View style={styles.sectionList}>
-        {sectionProgress.map((section, index) => (
-          <SectionButton
-            key={section.sectionId}
-            name={section.name}
-            completed={section.completed}
-            total={section.total}
-            state={section.state}
-            isActive={index === activeSectionIndex}
-            onPress={() => onSectionPress(index)}
-          />
-        ))}
-      </View>
+        <View style={styles.sectionList}>
+          {sectionProgress.map((section, index) => (
+            <SectionButton
+              key={section.sectionId}
+              name={section.name}
+              completed={section.completed}
+              total={section.total}
+              state={section.state}
+              isActive={index === activeSectionIndex}
+              onPress={() => onSectionPress(index)}
+            />
+          ))}
+        </View>
 
-      <View style={styles.spacer} />
+        <View style={styles.spacer} />
 
-      <View style={styles.timerContainer}>
-        <Text style={styles.timerIcon}>⏱</Text>
-        <Text style={styles.timerText}>{timerDisplay}</Text>
+        <View style={styles.timerContainer}>
+          <Text style={styles.timerIcon}>⏱</Text>
+          <Text style={styles.timerText}>{timerDisplay}</Text>
+        </View>
       </View>
     </View>
   );
 }
 
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+const EXPANDED_PANEL_WIDTH = 200;
+
 const styles = StyleSheet.create({
-  // Expanded styles
-  container: {
-    flex: 1,
+  // Overlay wrapper - positions absolutely to cover the entire screen
+  overlayWrapper: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 100,
+    flexDirection: 'row',
+  },
+  
+  // Semi-transparent backdrop behind the panel
+  backdrop: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
+  
+  // Expanded panel styles - positioned on the left side
+  expandedPanel: {
+    width: EXPANDED_PANEL_WIDTH,
     backgroundColor: '#1A1A1A',
     paddingTop: 50,
     paddingBottom: 20,
+    // Slight shadow for depth
+    shadowColor: '#000',
+    shadowOffset: { width: 2, height: 0 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 5,
   },
+  
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -159,9 +219,9 @@ const styles = StyleSheet.create({
     fontVariant: ['tabular-nums'],
   },
 
-  // Collapsed styles
+  // Collapsed styles - inline strip
   collapsedContainer: {
-    flex: 1,
+    width: 50,
     backgroundColor: '#1A1A1A',
     paddingTop: 50,
     paddingBottom: 20,
