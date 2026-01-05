@@ -4,6 +4,8 @@
 
 Expand Phit from a single-workout demo into a full workout planning app with dashboard navigation, workout scheduling, AI workout creation, exercise catalog, stats tracking, and improved workout session controls.
 
+> **Related:** This document covers app-level navigation and new screens. For WorkoutScreen internals (exercise cards, overlays, data entry), see [Master Workout View Design](./2026-01-04-master-workout-view-design.md).
+
 ## Data Architecture
 
 **Local-first with optional Firebase sync:**

@@ -13,10 +13,13 @@ A workout tracking app for iOS with a vertical scrolling architecture that displ
 | Component | Technology | Rationale |
 |-----------|------------|-----------|
 | Framework | React Native + Expo | Fastest path to iPhone, JavaScript ecosystem |
-| Backend | Firebase (Auth + Firestore) | Cloud sync, generous free tier, offline support |
+| Local Storage | AsyncStorage | Fast, offline-first, primary data store |
+| Cloud Sync | Firebase (Auth + Firestore) | Optional cloud backup, syncs when available |
 | Video | YouTube iFrame embeds | No hosting costs, extensive exercise library |
 | Animations | React Native Reanimated | Smooth scroll and overlay transitions |
 | Distribution | Expo Go (dev) / EAS Build (standalone) | No App Store required |
+
+> **Data Architecture:** Local-first approach. AsyncStorage is the primary store for fast reads and offline capability. Firebase provides optional cloud sync for backup and multi-device access.
 
 ---
 
@@ -164,7 +167,10 @@ A workout tracking app for iOS with a vertical scrolling architecture that displ
    - `◐` Half-filled: 1+ done, not all
    - `●` Filled: All complete
 3. **Active Highlight:** Current section (by scroll position) has background highlight
-4. **Collapse/Expand:** Can collapse to thin strip (dots only), swipe to expand
+4. **Collapse/Expand:**
+   - Collapsed: Thin strip (~50px) inline with content
+   - Expanded: **Overlays content** with semi-transparent backdrop (content dims)
+   - Tap dimmed area to collapse
 5. **Live Updates:** Counts update immediately on exercise completion
 
 ---
@@ -195,6 +201,29 @@ Ready for next exercise
 - Completion modal: "Workout Complete!"
 - Summary: total time, exercises completed, total volume
 - Buttons: "Save & Exit" / "Review Workout"
+
+---
+
+## Exit Workout Flow
+
+User can exit mid-workout via X/back button in header. Opens modal with three options:
+
+```
+┌─────────────────────────────────┐
+│     Leaving Workout?            │
+│                                 │
+│  [ Pause Timer ]                │  <- Stays on screen, pauses timer
+│  [ Save & Exit ]                │  <- Saves to incomplete, goes home
+│  [ Cancel Workout ]             │  <- Discards progress (with confirm)
+│                                 │
+│        [Keep Going]             │
+└─────────────────────────────────┘
+```
+
+**Actions:**
+- **Pause Timer:** Closes modal, pauses workout timer, shows "Resume" overlay
+- **Save & Exit:** Sets `pausedAt` timestamp, `state: 'paused'`, returns to dashboard. Can resume later.
+- **Cancel Workout:** Confirmation prompt, then sets `state: 'cancelled'`, returns to dashboard
 
 **Skipping Exercises:**
 - User can scroll past incomplete exercises
@@ -234,12 +263,16 @@ interface Exercise {
 
 ### Workout Session (Live Tracking)
 ```typescript
+type SessionState = 'active' | 'paused' | 'completed' | 'cancelled'
+
 interface WorkoutSession {
   id: string
   workoutId: string
   userId: string
   startedAt: Timestamp
   completedAt: Timestamp | null
+  pausedAt: Timestamp | null      // set when user saves & exits mid-workout
+  state: SessionState             // tracks session lifecycle
   exerciseLogs: ExerciseLog[]
 }
 
